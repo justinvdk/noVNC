@@ -20,6 +20,8 @@ The noVNC application consists of the following files and directories:
 * `vendor/` - Third party support libraries used by the application and the
   core library.
 
+* `package.json` - Node package file. Used by the application to read version.
+
 The most basic deployment consists of simply serving these files from a web
 server and setting up a WebSocket proxy to the VNC server.
 
