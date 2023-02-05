@@ -1372,14 +1372,9 @@ const UI = {
  * ------v------*/
 
     updatePointerLockButton() {
-        // Only show the button if the pointer lock API is properly supported
-        // AND in fullscreen.
+        // Only show the button if the pointer lock API is properly supported.
         if (
             UI.connected &&
-            (document.fullscreenElement || // alternative standard method
-             document.mozFullScreenElement || // currently working methods
-             document.webkitFullscreenElement ||
-             document.msFullscreenElement) &&
             (document.pointerLockElement !== undefined ||
                 document.mozPointerLockElement !== undefined)
         ) {
@@ -1395,6 +1390,7 @@ const UI = {
 
     requestPointerLock() {
         UI.rfb.requestInputLock({ pointer: true });
+        UI.closeControlbar();
     },
 
 /* ------^-------
