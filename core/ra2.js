@@ -139,7 +139,7 @@ export default class RSAAESAuthenticationState extends EventTargetMixin {
         this._hasStarted = true;
         // 1: Receive server public key
         await this._waitSockAsync(4);
-        const serverKeyLengthBuffer = this._sock.rQslice(0, 4);
+        const serverKeyLengthBuffer = this._sock.rQpeekBytes(4);
         const serverKeyLength = this._sock.rQshift32();
         if (serverKeyLength < 1024) {
             throw new Error("RA2: server public key is too short: " + serverKeyLength);
@@ -158,10 +158,11 @@ export default class RSAAESAuthenticationState extends EventTargetMixin {
         serverPublickey.set(serverE, 4 + serverKeyBytes);
 
         // verify server public key
+        let approveKey = this._waitApproveKeyAsync();
         this.dispatchEvent(new CustomEvent("serververification", {
             detail: { type: "RSA", publickey: serverPublickey }
         }));
-        await this._waitApproveKeyAsync();
+        await approveKey;
 
         // 2: Send client public key
         const clientKeyLength = 2048;
@@ -181,7 +182,8 @@ export default class RSAAESAuthenticationState extends EventTargetMixin {
         clientPublicKey[3] = clientKeyLength & 0xff;
         clientPublicKey.set(clientN, 4);
         clientPublicKey.set(clientE, 4 + clientKeyBytes);
-        this._sock.send(clientPublicKey);
+        this._sock.sQpushBytes(clientPublicKey);
+        this._sock.flush();
 
         // 3: Send client random
         const clientRandom = new Uint8Array(16);
@@ -192,7 +194,8 @@ export default class RSAAESAuthenticationState extends EventTargetMixin {
         clientRandomMessage[0] = (serverKeyBytes & 0xff00) >>> 8;
         clientRandomMessage[1] = serverKeyBytes & 0xff;
         clientRandomMessage.set(clientEncryptedRandom, 2);
-        this._sock.send(clientRandomMessage);
+        this._sock.sQpushBytes(clientRandomMessage);
+        this._sock.flush();
 
         // 4: Receive server random
         await this._waitSockAsync(2);
@@ -233,7 +236,8 @@ export default class RSAAESAuthenticationState extends EventTargetMixin {
         clientHash = await window.crypto.subtle.digest("SHA-1", clientHash);
         serverHash = new Uint8Array(serverHash);
         clientHash = new Uint8Array(clientHash);
-        this._sock.send(await clientCipher.makeMessage(clientHash));
+        this._sock.sQpushBytes(await clientCipher.makeMessage(clientHash));
+        this._sock.flush();
         await this._waitSockAsync(2 + 20 + 16);
         if (this._sock.rQshift16() !== 20) {
             throw new Error("RA2: wrong server hash");
@@ -260,6 +264,7 @@ export default class RSAAESAuthenticationState extends EventTargetMixin {
             throw new Error("RA2: failed to authenticate the message");
         }
         subtype = subtype[0];
+        let waitCredentials = this._waitCredentialsAsync(subtype);
         if (subtype === 1) {
             if (this._getCredentials().username === undefined ||
                 this._getCredentials().password === undefined) {
@@ -276,7 +281,7 @@ export default class RSAAESAuthenticationState extends EventTargetMixin {
         } else {
             throw new Error("RA2: wrong subtype");
         }
-        await this._waitCredentialsAsync(subtype);
+        await waitCredentials;
         let username;
         if (subtype === 1) {
             username = encodeUTF8(this._getCredentials().username).slice(0, 255);
@@ -293,7 +298,8 @@ export default class RSAAESAuthenticationState extends EventTargetMixin {
         for (let i = 0; i < password.length; i++) {
             credentials[username.length + 2 + i] = password.charCodeAt(i);
         }
-        this._sock.send(await clientCipher.makeMessage(credentials));
+        this._sock.sQpushBytes(await clientCipher.makeMessage(credentials));
+        this._sock.flush();
     }
 
     get hasStarted() {
